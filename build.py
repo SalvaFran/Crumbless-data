@@ -21,23 +21,25 @@ def cat(t):
     if s in ('bakery', 'pastry', 'confectionery'): return 'bakery'
     return 'supermarket' if s else 'other'
 
-def query(box, tries=2):
-    q = HEAD + 'nwr["diet:gluten_free"~"^(only|yes|limited)$"](%s,%s,%s,%s);out center;' % box
+def query(box, tries=2, timeout=200):
+    q = HEAD + ('nwr["diet:gluten_free"~"^(only|yes|limited)$"](%s,%s,%s,%s);out center;' % box if box else 'nwr["diet:gluten_free"~"^(only|yes|limited)$"];out center;')
     for attempt in range(tries):
         for url in MIRRORS:
+            t0 = time.time()
             try:
-                req = urllib.request.Request(url, data=urllib.parse.urlencode({'data': q}).encode(), headers={'User-Agent': 'crumbless-data (github.com/SalvaFran/crumbless-data)'})
-                with urllib.request.urlopen(req, timeout=660) as r:
+                req = urllib.request.Request(url, data=urllib.parse.urlencode({'data': q}).encode(), headers={'User-Agent': 'crumbless-data (github.com/SalvaFran/Crumbless-data)'})
+                with urllib.request.urlopen(req, timeout=timeout) as r:
                     x = r.read().decode()
                 if 'runtime error' in x[:400] or 'rate_limited' in x[:400]: raise RuntimeError(x[:200])
+                print(f'  {url.split("/")[2]} answered {box or "world"} in {time.time() - t0:.0f} s', flush=True)
                 return [dict(zip(F, l.split('\t'))) for l in x.splitlines() if l]
             except Exception as e:
-                print(f'  {url.split("/")[2]} failed for {box}: {str(e)[:120]}', flush=True); time.sleep(10)
+                print(f'  {url.split("/")[2]} failed for {box or "world"} after {time.time() - t0:.0f} s: {str(e)[:120]}', flush=True); time.sleep(5)
         time.sleep(30)
     return None
 
 def fetch(box, depth=0):
-    rows = query(box, tries=1 if depth < 2 else 2)
+    rows = query(box, tries=1 if depth < 2 else 2, timeout=120 if depth < 2 else 300)
     if rows is not None: return rows, []
     if depth >= 2: return [], [box]
     s, w, n, e = box; my, mx = (s + n) / 2, (w + e) / 2  # split in 4 and retry the smaller pieces
@@ -48,8 +50,11 @@ def fetch(box, depth=0):
 
 def main():
     tiles, failed, n = {}, [], 0
-    for i, box in enumerate(REGIONS):
-        rows, f = fetch(box); failed += f
+    # One worldwide query first: a single tag lookup is what Overpass does fastest. Regions only if it fails.
+    world = query(None, tries=1, timeout=900)
+    batches = [(None, world)] if world is not None else ((b, None) for b in REGIONS)
+    for i, (box, rows) in enumerate(batches):
+        if rows is None: rows, f = fetch(box); failed += f
         for t in rows:
             if not t.get('name') or not t.get('::lat'): continue
             lat, lon = float(t['::lat']), float(t['::lon'])
@@ -58,7 +63,7 @@ def main():
                  t.get('website') or t.get('contact:website', ''), t.get('phone') or t.get('contact:phone', ''), t.get('opening_hours', ''),
                  t.get('check_date:diet:gluten_free') or t.get('check_date', '')]
             tiles.setdefault(f'{int(lat // 1)}_{int(lon // 1)}', {})[p[0]] = p; n += 1
-        print(f'[{i + 1}/{len(REGIONS)}] {box}: {len(rows)} rows', flush=True)
+        print(f'[{i + 1}] {box or "world"}: {len(rows)} rows', flush=True)
     if n < 1000: sys.exit(f'Only {n} places, refusing to overwrite the data')
     os.makedirs(OUT, exist_ok=True)
     keep = set()
