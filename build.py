@@ -28,17 +28,19 @@ def main():
     tiles, n, skipped = {}, 0, 0
     for k, i, f in opl('gf.opl'):
         t = tags(f.get('T', ''))
-        if t.get('diet:gluten_free') not in ('only', 'yes', 'limited') or not t.get('name'): continue
+        if not t.get('name'): continue
+        g = t.get('diet:gluten_free') or t.get('gluten_free'); hint = 0 if g in ('only', 'yes', 'limited') else 1  # 1 = detected by name/cuisine
+        img = t.get('image', '') if t.get('image', '').startswith('http') else (f"https://commons.wikimedia.org/wiki/Special:FilePath/{t['wikimedia_commons'][5:]}?width=800" if t.get('wikimedia_commons', '').startswith('File:') else '')
         if k == 'n' and f.get('x'): lat, lon = float(f['y']), float(f['x'])
         elif k == 'w':
             pts = [loc[r] for r in f.get('N', '').split(',') if r in loc]
             if not pts: skipped += 1; continue
             lat, lon = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
         else: skipped += 1; continue  # relations (rare) have no simple point
-        p = [k + i, round(lat, 5), round(lon, 5), t['name'], 'only' if t['diet:gluten_free'] == 'only' else 'options', cat(t),
+        p = [k + i, round(lat, 5), round(lon, 5), t['name'], 'only' if g == 'only' else 'options', cat(t),
              ', '.join(x for x in [' '.join(x for x in [t.get('addr:street', ''), t.get('addr:housenumber', '')] if x), t.get('addr:city', '')] if x),
              t.get('website') or t.get('contact:website', ''), t.get('phone') or t.get('contact:phone', ''), t.get('opening_hours', ''),
-             t.get('check_date:diet:gluten_free') or t.get('check_date', '')]
+             t.get('check_date:diet:gluten_free') or t.get('check_date', ''), t.get('cuisine', ''), hint, img]
         tiles.setdefault(f'{int(lat // 1)}_{int(lon // 1)}', []).append(p); n += 1
     print(f'{n} places in {len(tiles)} tiles ({skipped} without a usable location)')
     if n < 5000: sys.exit(f'Only {n} places, refusing to overwrite the data')

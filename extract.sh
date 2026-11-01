@@ -8,16 +8,11 @@ MIRRORS=(https://ftp5.gwdg.de/pub/misc/openstreetmap/planet.openstreetmap.org/pb
 stream() { for u in "${MIRRORS[@]}"; do echo "  from $u" >&2; curl -fsSL --retry 2 "$u" | "$@" && return 0; echo "  failed, next mirror" >&2; done; return 1; }
 
 t=$(date +%s)
-stream osmium tags-filter -F pbf - nwr/diet:gluten_free --omit-referenced -f opl -o gf.opl --overwrite
-echo "pass 1: $(wc -l < gf.opl) tagged objects in $(( $(date +%s) - t )) s"
-
-python3 -c "
-import re
-ids = set()
-for l in open('gf.opl'):
-    if l[0] == 'w': m = re.search(r' N(\S+)', l); ids.update(m[1].split(',') if m else [])
-open('nodes.txt', 'w').write('\n'.join(sorted(ids)) + '\n')
-print('way nodes needed:', len(ids))"
+# Tagged places plus every food place (to catch gluten-free names/cuisines); filter.py keeps the gluten-free ones.
+stream osmium tags-filter -F pbf - nwr/diet:gluten_free nwr/gluten_free nwr/amenity=restaurant,cafe,fast_food,food_court,ice_cream,pub,bar,biergarten \
+  nwr/shop=bakery,pastry,confectionery,supermarket,convenience,health_food,deli,organic --omit-referenced -f opl -o all.opl --overwrite
+echo "pass 1: $(wc -l < all.opl) food or tagged objects in $(( $(date +%s) - t )) s"
+python3 filter.py && rm all.opl
 
 t=$(date +%s)
 stream osmium getid -F pbf - -i nodes.txt -f opl -o nodes.opl --overwrite
