@@ -38,6 +38,44 @@ def query(box, tries=2, timeout=200):
         time.sleep(30)
     return None
 
+# QLever (University of Freiburg): the whole OpenStreetMap planet behind a fast SPARQL endpoint. Primary source.
+QLEVER = 'https://qlever.cs.uni-freiburg.de/api/osm-planet'
+QCOLS = ['amenity', 'shop', 'cuisine', 'addr:street', 'addr:housenumber', 'addr:city', 'website', 'contact:website', 'phone', 'contact:phone', 'opening_hours', 'check_date', 'check_date:diet:gluten_free']
+QVARS = ['v%d' % i for i in range(len(QCOLS))]
+SPARQL = ('PREFIX osmkey: <https://www.openstreetmap.org/wiki/Key:>\nPREFIX geo: <http://www.opengis.net/ont/geosparql#>\n'
+  'SELECT ?osm ?gf ?name ?wkt ' + ' '.join('?' + v for v in QVARS) + ' WHERE {\n ?osm osmkey:diet:gluten_free ?gf . FILTER(?gf IN ("only", "yes", "limited"))\n'
+  ' ?osm osmkey:name ?name .\n ?osm geo:hasGeometry/geo:asWKT ?wkt .\n' + ''.join(' OPTIONAL { ?osm <https://www.openstreetmap.org/wiki/Key:%s> ?%s }\n' % (c, v) for c, v in zip(QCOLS, QVARS)) + '}')
+
+def lit(x):
+    x = x.strip()
+    if x.startswith('<') and x.endswith('>'): return x[1:-1]
+    if x.startswith('"'): x = x[1:x.rfind('"')] if x.rfind('"') > 0 else x[1:]
+    return x.replace('\\"', '"').replace('\\\\', '\\')
+
+def centroid(wkt):
+    nums = [float(v) for v in __import__('re').findall(r'-?\d+(?:\.\d+)?(?:e-?\d+)?', wkt.split('(', 1)[-1])]
+    xs, ys = nums[0::2], nums[1::2]
+    return (sum(ys) / len(ys), sum(xs) / len(xs)) if xs else (None, None)
+
+def qlever():
+    t0 = time.time()
+    try:
+        req = urllib.request.Request(QLEVER, data=urllib.parse.urlencode({'query': SPARQL}).encode(),
+          headers={'Accept': 'text/tab-separated-values', 'User-Agent': 'crumbless-data (github.com/SalvaFran/Crumbless-data)'})
+        with urllib.request.urlopen(req, timeout=900) as r: lines = r.read().decode().splitlines()
+    except Exception as e:
+        print(f'  QLever failed after {time.time() - t0:.0f} s: {str(e)[:200]}', flush=True); return None
+    print(f'  QLever answered in {time.time() - t0:.0f} s with {len(lines) - 1} rows', flush=True)
+    rows = []
+    for l in lines[1:]:
+        v = [lit(x) for x in l.split('\t')] + [''] * 20
+        m = __import__('re').match(r'https://www\.openstreetmap\.org/(node|way|relation)/(\d+)', v[0])
+        lat, lon = centroid(v[3])
+        if not m or lat is None: continue
+        t = {'::type': m[1], '::id': m[2], '::lat': str(lat), '::lon': str(lon), 'name': v[2], 'diet:gluten_free': v[1]}
+        t.update({c: v[4 + i] for i, c in enumerate(QCOLS) if v[4 + i]}); rows.append(t)
+    return rows
+
 def fetch(box, depth=0):
     rows = query(box, tries=1 if depth < 2 else 2, timeout=120 if depth < 2 else 300)
     if rows is not None: return rows, []
@@ -51,7 +89,8 @@ def fetch(box, depth=0):
 def main():
     tiles, failed, n = {}, [], 0
     # One worldwide query first: a single tag lookup is what Overpass does fastest. Regions only if it fails.
-    world = query(None, tries=1, timeout=900)
+    world = qlever()
+    if not world: world = query(None, tries=1, timeout=600)
     batches = [(None, world)] if world is not None else ((b, None) for b in REGIONS)
     for i, (box, rows) in enumerate(batches):
         if rows is None: rows, f = fetch(box); failed += f
