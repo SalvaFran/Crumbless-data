@@ -7,10 +7,14 @@ concurrency: { group: update, cancel-in-progress: false }
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
-      - run: python3 build.py
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+      - name: Extract gluten-free places from the planet
+        run: ./extract.sh
+      - name: Build tiles
+        run: python3 build.py
       - name: Commit if anything changed
         run: |
           git config user.name "crumbless-bot"
