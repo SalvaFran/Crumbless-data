@@ -16,7 +16,7 @@ cat = "to_json(taxonomy)" if 'taxonomy' in cols else "to_json(categories)"
 t0 = time.time()
 rows = db.execute(f"""
   SELECT id, (bbox.ymin + bbox.ymax) / 2 lat, (bbox.xmin + bbox.xmax) / 2 lon, names.primary name, {cat} cats,
-    to_json(addresses[1]) addr, websites[1] web, phones[1] phone, confidence, to_json(list_transform(sources, s -> s.dataset)) src
+    to_json(addresses[1]) addr, websites[1] web, phones[1] phone, confidence, to_json(list_transform(sources, lambda s: s.dataset)) src
   FROM read_parquet('{src}', hive_partitioning=1)
   WHERE names.primary IS NOT NULL AND ({cat} ILIKE '%gluten%' OR regexp_matches(names.primary, '{GF}'))
 """).fetchall()
