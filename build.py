@@ -24,7 +24,7 @@ def cat(t):
     return 'supermarket' if s else 'other'
 
 from gfwords import GF  # noqa: E402  (same gluten-free words)
-from chains import candidate, chain_of  # noqa: E402
+from chains import CHAINS, candidate, chain_of  # noqa: E402
 norm = lambda s: {w for w in re.sub(r'[^a-z0-9 ]', '', s.lower()).split() if len(w) > 2}
 
 def overture(tiles):
@@ -58,6 +58,7 @@ def main():
         ch = chain_of(t, lat, lon) if candidate(t) else None
         if not g and not named and not ch: continue  # a chain outlet outside the chain's country
         hint = 0 if g or ch else 1
+        if ch and CHAINS[ch][3] and not g: g = 'only'  # a 100% gluten-free chain
         note = next((t[k] for k in ('diet:gluten_free:note', 'diet:gluten_free:description', 'description') if t.get(k) and (k != 'description' or GF.search(t[k]))), '')[:240]
         p = [k + i, round(lat, 5), round(lon, 5), t['name'], 'only' if g == 'only' else 'options', cat(t),
              ', '.join(x for x in [' '.join(x for x in [t.get('addr:street', ''), t.get('addr:housenumber', '')] if x), t.get('addr:city', '')] if x),
