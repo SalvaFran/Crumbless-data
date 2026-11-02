@@ -2,3 +2,4 @@ __pycache__
 overture.json
 *.opl
 nodes.txt
+countries.geojson
