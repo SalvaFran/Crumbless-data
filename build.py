@@ -23,6 +23,21 @@ def cat(t):
     if s in ('bakery', 'pastry', 'confectionery'): return 'bakery'
     return 'supermarket' if s else 'other'
 
+from gfwords import GF  # noqa: E402  (same gluten-free words)
+norm = lambda s: {w for w in re.sub(r'[^a-z0-9 ]', '', s.lower()).split() if len(w) > 2}
+
+def overture(tiles):
+    """Add Overture Maps places (overture.json). Same place as an OpenStreetMap one (very close, or close with a shared name word): add the evidence to it."""
+    if not os.path.exists('overture.json'): return 0
+    new = merged = 0
+    for oid, lat, lon, name, why, kind, addr, web, phone, conf, srcs in json.load(open('overture.json', encoding='utf-8')):
+        ts = tiles.setdefault(f'{int(lat // 1)}_{int(lon // 1)}', []); nm = norm(name)
+        m = next((p for p in ts if p[0][0] != 'o' and abs(p[1] - lat) < .0025 and abs(p[2] - lon) < .004 and (abs(p[1] - lat) < .0005 and abs(p[2] - lon) < .0008 or nm & norm(p[3]))), None)
+        if m: m[17], m[18] = why, srcs; m[12] = 0 if why == 'cat' else m[12]; m[7] = m[7] or web; m[8] = m[8] or phone; m[6] = m[6] or addr; merged += 1
+        else: ts.append(['o' + oid, lat, lon, name, 'options', kind, addr, web, phone, '', '', '', 1 if why == 'name' else 0, '', '', '', 0, why, srcs]); new += 1
+    print(f'Overture: {new} new places, {merged} merged into OpenStreetMap ones')
+    return new
+
 def main():
     loc = {f'n{i}': (float(f['y']), float(f['x'])) for k, i, f in opl('nodes.opl') if k == 'n' and f.get('x')}
     tiles, n, skipped = {}, 0, 0
@@ -37,12 +52,17 @@ def main():
             if not pts: skipped += 1; continue
             lat, lon = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
         else: skipped += 1; continue  # relations (rare) have no simple point
+        co = t.get('diet:coeliac') or t.get('diet:celiac'); g = g if g in ('only', 'yes', 'limited') else ('yes' if co in ('yes', 'only') else None); hint = 0 if g else 1
+        note = next((t[k] for k in ('diet:gluten_free:note', 'diet:gluten_free:description', 'description') if t.get(k) and (k != 'description' or GF.search(t[k]))), '')[:240]
         p = [k + i, round(lat, 5), round(lon, 5), t['name'], 'only' if g == 'only' else 'options', cat(t),
              ', '.join(x for x in [' '.join(x for x in [t.get('addr:street', ''), t.get('addr:housenumber', '')] if x), t.get('addr:city', '')] if x),
              t.get('website') or t.get('contact:website', ''), t.get('phone') or t.get('contact:phone', ''), t.get('opening_hours', ''),
-             t.get('check_date:diet:gluten_free') or t.get('check_date', ''), t.get('cuisine', ''), hint, img]
+             t.get('check_date:diet:gluten_free') or t.get('check_date', ''), t.get('cuisine', ''), hint, img,
+             g or '', note, 1 if t.get('check_date:diet:gluten_free') else 0, '', '']
         tiles.setdefault(f'{int(lat // 1)}_{int(lon // 1)}', []).append(p); n += 1
-    print(f'{n} places in {len(tiles)} tiles ({skipped} without a usable location)')
+    print(f'{n} OpenStreetMap places ({skipped} without a usable location)')
+    n += overture(tiles)
+    print(f'{n} places in {len(tiles)} tiles')
     if n < 5000: sys.exit(f'Only {n} places, refusing to overwrite the data')
     os.makedirs(OUT, exist_ok=True)
     for path in glob.glob(f'{OUT}/*.json'):

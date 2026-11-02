@@ -13,6 +13,8 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
       - name: Extract gluten-free places from the planet
         run: ./extract.sh
+      - name: Gluten-free places from Overture Maps (Meta, Microsoft, Foursquare...)
+        run: pip install -q duckdb && python3 overture.py || echo "Overture skipped"
       - name: Build tiles
         run: python3 build.py
       - name: Commit if anything changed
