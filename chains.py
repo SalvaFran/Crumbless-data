@@ -17,7 +17,7 @@ CHAINS = {
   'no-mcdonalds': ('NO', ["McDonald's"], True, False), 'no-peppes': ('NO', ['Peppes Pizza'], True, False), 'no-circlek': ('NO', ['Circle K'], True, False), 'no-labaguette': ('NO', ['La Baguette'], True, False),
   # Poland, France/Belgium, Italy
   'pl-wolna': ('PL', ['WOLNA', 'Wolna Piekarnia', 'WOLNA piekarnia bezglutenowa'], False, True),
-  'fr-copains': ('FR BE', ['Copains', 'Copains Boulangerie'], True, True),
+  'fr-copains': ('FR BE', ['Copains', 'Copains Boulangerie'], True, True),  # only in its cities, exact spelling (other bakeries are called Co'pains, Co-Pains...)
   'it-mcdonalds': ('IT', ["McDonald's"], True, False),
   # Americas
   'ar-mcdonalds': ('AR', ["McDonald's"], True, False), 'ar-gout': ('AR CL', ['Goût', 'Gôut', 'Goût Gluten Free', 'Gout Gluten Free'], True, True),
@@ -30,6 +30,8 @@ CHAINS = {
   'nz-hell': ('NZ', ['Hell Pizza', 'HELL Pizza', 'Hell'], False, False), 'au-hellagood': ('AU', ['Hella Good'], True, False), 'au-a25': ('AU', ['A25 Pizzeria', 'A25'], False, False),
   'ae-wildmoon': ('AE FR QA', ['Wild & The Moon', 'Wild and The Moon'], True, True), 'jp-tskitchen': ('JP', ["Gluten Free T's Kitchen", 'グルテンフリー ティーズキッチン'], True, True),
 }
+# Some chains only exist in a few cities and share their name with unrelated places: exact spelling, inside these boxes (s, w, n, e).
+AREAS = {'fr-copains': [(48.8, 2.2, 48.95, 2.45), (45.7, 4.78, 45.8, 4.92), (44.8, -0.65, 44.9, -0.5), (50.78, 4.28, 50.92, 4.45)]}
 key = lambda s: re.sub(r'[^\w]', '', s.lower().replace('&', 'and'))
 # Same brand in several countries (McDonald's): a name maps to all its chain keys; the country decides.
 BRANDS, NAMES = {}, {}
@@ -57,4 +59,5 @@ def country(lat, lon):
 def chain_of(t, lat, lon):
     ks = candidate(t)
     if not ks: return None
-    cc = country(lat, lon); return next((k for k in ks if cc in CHAINS[k][0].split()), None)
+    ok = lambda k: k not in AREAS or (t.get('name', '').strip().lower() in [n.lower() for n in CHAINS[k][1]] and any(a <= lat <= c and b <= lon <= d for a, b, c, d in AREAS[k]))
+    cc = country(lat, lon); return next((k for k in ks if cc in CHAINS[k][0].split() and ok(k)), None)
